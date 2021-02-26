@@ -1,9 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import events from 'events'
 
-import './App.css'
-
-import { listParts, listUploads, upload } from './multipart'
+import { upload } from './multipart'
 import Progress from './Progress'
 
 function App() {
@@ -11,21 +9,6 @@ function App() {
   const [progress, setProgress] = useState()
   const [status, setStatus] = useState()
   const [uploadResult, setUploadResult] = useState()
-
-  useEffect(() => {
-    async function run() {
-      const uploads = await listUploads()
-      console.log(uploads)
-
-      for (const upload of uploads.Uploads) {
-        const parts = await listParts(upload)
-
-        console.log(parts)
-      }
-    }
-
-    run()
-  }, [])
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -49,7 +32,7 @@ function App() {
       setUploadResult(await upload(file, emitter))
       setProgress(1)
       setStatus('completed')
-    } finally {
+    } catch (err) {
       setStatus('error')
     }
   }
