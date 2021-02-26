@@ -1,0 +1,14 @@
+.progress {
+  min-height: 20px;
+  min-width: 200px;
+  width: 200px;
+  border: 1px solid grey;
+  position: 'relative';
+}
+
+.progress-bar {
+  position: 'absolute';
+  height: 20px;
+  background-color: red;
+  transition: width 500ms ease;
+}

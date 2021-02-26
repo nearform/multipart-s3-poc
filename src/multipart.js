@@ -7,6 +7,8 @@ import {
   UploadPartCommand,
   CompleteMultipartUploadCommand,
   AbortMultipartUploadCommand,
+  ListMultipartUploadsCommand,
+  ListPartsCommand,
 } from '@aws-sdk/client-s3'
 
 const region = process.env.REACT_APP_REGION
@@ -14,6 +16,8 @@ const bucketName = process.env.REACT_APP_BUCKET
 const identityPoolId = process.env.REACT_APP_IDENTITY_POOL_ID
 
 const chunkSizeBytes = 5 * 1024 * 1024
+
+const delay = t => new Promise(resolve => setTimeout(resolve, t))
 
 const s3 = new S3Client({
   region: region,
@@ -23,7 +27,25 @@ const s3 = new S3Client({
   }),
 })
 
-export default async function upload(file) {
+export function listUploads() {
+  return s3.send(
+    new ListMultipartUploadsCommand({
+      Bucket: bucketName,
+    })
+  )
+}
+
+export function listParts(upload) {
+  return s3.send(
+    new ListPartsCommand({
+      Bucket: bucketName,
+      UploadId: upload.UploadId,
+      Key: upload.Key,
+    })
+  )
+}
+
+export async function upload(file, emitter) {
   const totalSizeBytes = file.size
   const key = file.name
 
@@ -50,25 +72,38 @@ export default async function upload(file) {
     const parts = []
 
     for (let partIndex = 0; partIndex < numberOfPartsToUpload; partIndex++) {
+      const partNumber = partIndex + 1
       const start = partIndex * chunkSizeBytes
       const end = start + Math.min(chunkSizeBytes, totalSizeBytes - start)
 
       const body = file.slice(start, end)
 
-      const uploadPartResult = await s3.send(
-        new UploadPartCommand({
-          PartNumber: partIndex + 1,
-          Body: body,
-          UploadId: createUploadResult.UploadId,
-          Key: key,
-          Bucket: bucketName,
-        })
-      )
+      while (true) {
+        try {
+          const uploadPartResult = await s3.send(
+            new UploadPartCommand({
+              PartNumber: partNumber,
+              Body: body,
+              UploadId: createUploadResult.UploadId,
+              Key: key,
+              Bucket: bucketName,
+            })
+          )
 
-      parts.push({
-        PartNumber: partIndex + 1,
-        ETag: uploadPartResult.ETag,
-      })
+          parts.push({
+            PartNumber: partNumber,
+            ETag: uploadPartResult.ETag,
+          })
+
+          break
+        } catch (err) {
+          emitter.emit('pause', partNumber)
+          await delay(5000)
+          emitter.emit('resume', partNumber)
+        }
+      }
+
+      emitter.emit('progress', partNumber / numberOfPartsToUpload)
     }
 
     return s3.send(
